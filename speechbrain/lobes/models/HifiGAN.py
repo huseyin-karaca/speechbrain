@@ -40,6 +40,12 @@ from torchaudio import transforms
 import speechbrain as sb
 from speechbrain.nnet.CNN import Conv1d, Conv2d, ConvTranspose1d
 
+try:
+    from mamba_ssm import Mamba2
+except ImportError:
+    Mamba2 = None
+    print("Warning: mamba_ssm not found. Mamba2 will not be available.")
+
 LRELU_SLOPE = 0.1
 
 
@@ -368,6 +374,40 @@ class ResBlock2(torch.nn.Module):
             layer.remove_weight_norm()
 
 
+class BiMamba2Block(nn.Module):
+    """Bidirectional Mamba2 Block"""
+
+    def __init__(self, channels, d_state=64, d_conv=4, expand=2):
+        super().__init__()
+        if Mamba2 is None:
+            raise ImportError("mamba_ssm is not installed.")
+        self.forward_mamba = Mamba2(
+            d_model=channels,
+            d_state=d_state,
+            d_conv=d_conv,
+            expand=expand,
+        )
+        self.backward_mamba = Mamba2(
+            d_model=channels,
+            d_state=d_state,
+            d_conv=d_conv,
+            expand=expand,
+        )
+        self.norm = nn.LayerNorm(channels)
+
+    def forward(self, x):
+        # x: [Batch, Channel, Time]
+        x_t = x.transpose(1, 2)  # [Batch, Time, Channel]
+
+        out_fwd = self.forward_mamba(x_t)
+        out_bwd = self.backward_mamba(x_t.flip(1)).flip(1)
+
+        out = out_fwd + out_bwd
+        out = self.norm(out)
+
+        return out.transpose(1, 2)  # [Batch, Channel, Time]
+
+
 class HifiganGenerator(torch.nn.Module):
     """HiFiGAN Generator with Multi-Receptive Field Fusion (MRF)
 
@@ -446,6 +486,7 @@ class HifiganGenerator(torch.nn.Module):
         resblock = ResBlock1 if resblock_type == "1" else ResBlock2
         # upsampling layers
         self.ups = nn.ModuleList()
+        self.mambas = nn.ModuleList()
         for i, (u, k) in enumerate(
             zip(upsample_factors, upsample_kernel_sizes)
         ):
@@ -464,6 +505,7 @@ class HifiganGenerator(torch.nn.Module):
         self.resblocks = nn.ModuleList()
         for i in range(len(self.ups)):
             ch = upsample_initial_channel // (2 ** (i + 1))
+            self.mambas.append(BiMamba2Block(channels=ch, d_state=64))
             for _, (k, d) in enumerate(
                 zip(resblock_kernel_sizes, resblock_dilation_sizes)
             ):
@@ -512,7 +554,9 @@ class HifiganGenerator(torch.nn.Module):
                     z_sum = self.resblocks[i * self.num_kernels + j](o)
                 else:
                     z_sum += self.resblocks[i * self.num_kernels + j](o)
-            o = z_sum / self.num_kernels
+            # Add Mamba branch
+            z_sum += self.mambas[i](o)
+            o = z_sum / (self.num_kernels + 1)
         o = F.leaky_relu(o)
         o = self.conv_post(o)
         o = torch.tanh(o)
@@ -525,6 +569,9 @@ class HifiganGenerator(torch.nn.Module):
             layer.remove_weight_norm()
         for layer in self.resblocks:
             layer.remove_weight_norm()
+        for layer in self.mambas:
+            if hasattr(layer, "remove_weight_norm"):
+                layer.remove_weight_norm()
         self.conv_pre.remove_weight_norm()
         self.conv_post.remove_weight_norm()
 

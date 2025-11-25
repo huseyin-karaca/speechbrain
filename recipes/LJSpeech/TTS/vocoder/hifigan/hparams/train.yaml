@@ -3,13 +3,13 @@
 ###################################
 seed: 1234
 __set_seed: !apply:speechbrain.utils.seed_everything [!ref <seed>]
-output_folder: !ref ./results/hifi_gan/<seed>
+output_folder: !ref ./results/hifi_gan/hybrid_mamba_<seed>
 save_folder: !ref <output_folder>/save
 train_log: !ref <output_folder>/train_log.txt
 progress_sample_path: !ref <output_folder>/samples
 epochs: 500
 keep_checkpoint_interval: 50
-use_tensorboard: False
+use_tensorboard: True
 
 #################################
 # Data files and pre-processing #
