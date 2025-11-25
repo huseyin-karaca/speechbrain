@@ -161,7 +161,7 @@ dmypy.json
 
 
 # Hus added
-/workspace/speechbrain/recipes/LJSpeech/TTS/vocoder/hifigan/LJSpeech-1.1
-/workspace/speechbrain/recipes/LJSpeech/TTS/vocoder/hifigan/LJSpeech-1.1/*
-/workspace/speechbrain/recipes/LJSpeech/TTS/vocoder/hifigan/LJSpeech-1.1/**
-/workspace/speechbrain/recipes/LJSpeech/TTS/vocoder/hifigan/LJSpeech-1.1.tar.bz2
+recipes/LJSpeech/TTS/vocoder/hifigan/LJSpeech-1.1
+recipes/LJSpeech/TTS/vocoder/hifigan/LJSpeech-1.1/*
+recipes/LJSpeech/TTS/vocoder/hifigan/LJSpeech-1.1/**
+recipes/LJSpeech/TTS/vocoder/hifigan/LJSpeech-1.1.tar.bz2
