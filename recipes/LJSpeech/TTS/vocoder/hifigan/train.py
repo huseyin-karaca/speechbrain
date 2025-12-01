@@ -20,6 +20,7 @@ from hyperpyyaml import load_hyperpyyaml
 import speechbrain as sb
 from speechbrain.dataio import audio_io
 from speechbrain.utils.data_utils import scalarize
+from speechbrain.utils.train_logger import plot_spectrogram
 
 
 class HifiGanBrain(sb.Brain):
@@ -198,6 +199,12 @@ class HifiGanBrain(sb.Brain):
                     train_stats=self.last_loss_stats[sb.Stage.TRAIN],
                     valid_stats=self.last_loss_stats[sb.Stage.VALID],
                 )
+            if getattr(self.hparams, "use_wandb", False):
+                self.wandb_logger.log_stats(
+                    stats_meta={"Epoch": epoch, "lr_g": lr_g, "lr_d": lr_d},
+                    train_stats=self.last_loss_stats[sb.Stage.TRAIN],
+                    valid_stats=self.last_loss_stats[sb.Stage.VALID],
+                )
 
             # Save the current checkpoint and delete previous checkpoints.
             epoch_metadata = {
@@ -234,6 +241,11 @@ class HifiGanBrain(sb.Brain):
                     {"Epoch loaded": self.hparams.epoch_counter.current},
                     test_stats=self.last_loss_stats[sb.Stage.TEST],
                 )
+            if getattr(self.hparams, "use_wandb", False):
+                self.wandb_logger.log_stats(
+                    {"Epoch loaded": self.hparams.epoch_counter.current},
+                    test_stats=self.last_loss_stats[sb.Stage.TEST],
+                )
             self.run_inference_sample("Test")
 
     def run_inference_sample(self, name):
@@ -263,7 +275,38 @@ class HifiGanBrain(sb.Brain):
             )
             self.tensorboard_logger.log_figure(f"{name}/mel_target", x)
             self.tensorboard_logger.log_figure(f"{name}/mel_pred", spec_out)
-        else:
+        if getattr(self.hparams, "use_wandb", False) and hasattr(self, "wandb_logger") and self.wandb_logger.run is not None:
+            import wandb
+            
+            # Log audio
+            self.wandb_logger.run.log(
+                {
+                    f"{name}/audio_target": wandb.Audio(
+                        y.squeeze(0).cpu().numpy(),
+                        sample_rate=self.hparams.sample_rate,
+                    ),
+                    f"{name}/audio_pred": wandb.Audio(
+                        sig_out.squeeze(0).cpu().numpy(),
+                        sample_rate=self.hparams.sample_rate,
+                    ),
+                },
+                step=self.hparams.epoch_counter.current,
+            )
+            
+            # Log spectrograms
+            fig_target = plot_spectrogram(x)
+            fig_pred = plot_spectrogram(spec_out)
+            if fig_target is not None:
+                self.wandb_logger.run.log(
+                    {f"{name}/mel_target": wandb.Image(fig_target)},
+                    step=self.hparams.epoch_counter.current,
+                )
+            if fig_pred is not None:
+                self.wandb_logger.run.log(
+                    {f"{name}/mel_pred": wandb.Image(fig_pred)},
+                    step=self.hparams.epoch_counter.current,
+                )
+        if not self.hparams.use_tensorboard and not getattr(self.hparams, "use_wandb", False):
             # folder name is the current epoch for validation and "test" for test
             folder = (
                 self.hparams.epoch_counter.current
@@ -337,6 +380,11 @@ def dataio_prepare(hparams):
             output_keys=["id", "mel", "sig"],
         )
 
+        if hparams.get("min_duration") and dataset == "train":
+            datasets[dataset] = datasets[dataset].filtered_sorted(
+                key_min_value={"duration": hparams["min_duration"]}
+            )
+
     return datasets
 
 
@@ -392,6 +440,22 @@ if __name__ == "__main__":
             sb.utils.train_logger.TensorboardLogger(
                 save_dir=hparams["output_folder"] + "/tensorboard"
             )
+        )
+    
+    if hparams.get("use_wandb", False):
+        import wandb
+        from speechbrain.utils.train_logger import WandBLogger
+        
+        wandb_init_kwargs = hparams.get("wandb_init_kwargs", {})
+        if "dir" not in wandb_init_kwargs:
+            wandb_dir = hparams["output_folder"] + "/wandb"
+            if not os.path.exists(wandb_dir):
+                os.makedirs(wandb_dir)
+            wandb_init_kwargs["dir"] = wandb_dir
+        
+        hifi_gan_brain.wandb_logger = WandBLogger(
+            initializer=wandb.init,
+            **wandb_init_kwargs
         )
 
     # Training

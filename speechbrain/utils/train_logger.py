@@ -225,7 +225,7 @@ class WandBLogger(TrainLogger):
             if if_main_process():
                 self.run = initializer(*args, **kwargs)
         except Exception as e:
-            raise e("There was an issue with the WandB Logger initialization")
+            raise RuntimeError("There was an issue with the WandB Logger initialization") from e
 
     @main_process_only
     def log_stats(
