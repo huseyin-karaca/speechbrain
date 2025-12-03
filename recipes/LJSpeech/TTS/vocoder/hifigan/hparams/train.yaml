@@ -3,7 +3,7 @@
 ###################################
 seed: 1234
 __set_seed: !apply:speechbrain.utils.seed_everything [!ref <seed>]
-output_folder: !ref ./results/hifi_gan/hybrid_mamba_2_longer_segments_<seed>
+output_folder: !ref ./results/hifi_gan/hybrid_1_longer_segments_<seed>
 save_folder: !ref <output_folder>/save
 train_log: !ref <output_folder>/train_log.txt
 progress_sample_path: !ref <output_folder>/samples
@@ -107,7 +107,7 @@ mel_spectogram: !name:speechbrain.lobes.models.HifiGAN.mel_spectogram
   mel_scale: !ref <mel_scale>
   compression: !ref <dynamic_range_compression>
 
-generator: !new:speechbrain.lobes.models.HifiGAN.HybridHifiganGenerator2
+generator: !new:speechbrain.lobes.models.HifiGAN.HifiganGenerator
   in_channels: !ref <in_channels>
   out_channels: !ref <out_channels>
   resblock_type: !ref <resblock_type>
@@ -119,7 +119,7 @@ generator: !new:speechbrain.lobes.models.HifiGAN.HybridHifiganGenerator2
   inference_padding: !ref <inference_padding>
   cond_channels: !ref <cond_channels>
   conv_post_bias: !ref <conv_post_bias>
-  mamba_d_state: 64
+  #mamba_d_state: 64
 
 discriminator: !new:speechbrain.lobes.models.HifiGAN.HifiganDiscriminator
 
